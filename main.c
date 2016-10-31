@@ -949,6 +949,7 @@ uint32_t parse_header(uint8_t *h, size_t h_len, const char *hex)
     return bin_len;
 }
 
+#ifndef SHARED_LIB
 enum
 {
     OPT_HELP,
@@ -1054,3 +1055,4 @@ int main(int argc, char **argv)
     init_and_run_opencl(header, header_len);
     return 0;
 }
+#endif
