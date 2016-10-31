@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -13,11 +14,8 @@
 #include <errno.h>
 #include <CL/cl.h>
 #include "blake.h"
-#include "_kernel.h"
 
-typedef uint8_t		uchar;
-typedef uint32_t	uint;
-typedef uint64_t	ulong;
+#include "silentarmy.h"
 #include "param.h"
 
 #define MIN(A, B)	(((A) < (B)) ? (A) : (B))
@@ -29,11 +27,6 @@ uint64_t	nr_nonces = 1;
 uint32_t	do_list_gpu = 0;
 uint32_t	gpu_to_use = 0;
 
-typedef struct  debug_s
-{
-    uint32_t    dropped_coll;
-    uint32_t    dropped_stor;
-}               debug_t;
 
 void debug(const char *fmt, ...)
 {
@@ -703,7 +696,8 @@ uint32_t verify_sols(cl_command_queue queue, cl_mem buf_sols, uint64_t *nonce)
 uint32_t solve_equihash(cl_context ctx, cl_command_queue queue,
 	cl_kernel k_init_ht, cl_kernel *k_rounds, cl_kernel k_sols,
 	cl_mem *buf_ht, cl_mem buf_sols, cl_mem buf_dbg, size_t dbg_size,
-	uint8_t *header, size_t header_len, uint64_t nonce)
+			uint8_t *header, size_t header_len, uint64_t nonce,
+			bool verify)
 {
     blake2b_state_t     blake;
     cl_mem              buf_blake_st;
@@ -755,7 +749,11 @@ uint32_t solve_equihash(cl_context ctx, cl_command_queue queue,
     global_ws = NR_ROWS;
     check_clEnqueueNDRangeKernel(queue, k_sols, 1, NULL,
 	    &global_ws, &local_work_size, 0, NULL, NULL);
-    sol_found = verify_sols(queue, buf_sols, nonce_ptr);
+    /* Verify_sols function also prints the solutions and that is not
+     * what we always want */
+    if (verify) {
+      sol_found = verify_sols(queue, buf_sols, nonce_ptr);
+    }
     clReleaseMemObject(buf_blake_st);
     return sol_found;
 }
@@ -789,7 +787,7 @@ void run_opencl(uint8_t *header, size_t header_len, cl_context ctx,
     uint64_t t0 = now();
     for (nonce = 0; nonce < nr_nonces; nonce++)
 	total += solve_equihash(ctx, queue, k_init_ht, k_rounds, k_sols, buf_ht,
-		buf_sols, buf_dbg, dbg_size, header, header_len, nonce);
+				buf_sols, buf_dbg, dbg_size, header, header_len, nonce, true);
     uint64_t t1 = now();
     fprintf(stderr, "Total %ld solutions in %.1f ms (%.1f Sol/s)\n",
 	    total, (t1 - t0) / 1e3, total / ((t1 - t0) / 1e6));
